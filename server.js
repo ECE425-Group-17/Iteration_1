@@ -1,95 +1,137 @@
 const http = require('http');
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
-const qs = require('querystring');
 
-// Create or open SQLite database file
-const db = new sqlite3.Database('./users.db', (err) => {
-  if (err) throw err;
-  console.log('Connected to SQLite database.');
-});
+const homePage = `
+  <html>
+  <head>
+    <title>Login Page</title>
+    <style>
+      body { display:flex; justify-content:center; align-items:center; height:100vh; margin:0; font-family:Arial,sans-serif; background:#f0f0f0; }
+      .login-box { background:white; padding:2rem; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.2); text-align:center; width:300px; }
+      input { display:block; width:100%; padding:0.5rem; margin:0.5rem 0; box-sizing:border-box; }
+      button { padding:0.5rem 1rem; margin-top:1rem; width:100%; }
+      .msg { margin-top:1rem; color:#333; font-size:14px; }
+    </style>
+  </head>
+  <body>
+    <div class="login-box">
+      <h2>Login / Sign Up</h2>
 
-// Create users table if it doesn't exist
-db.run(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE,
-  password_hash TEXT
-)`);
+      <input type="text" id="signupUsername" placeholder="Username">
+      <input type="email" id="signupEmail" placeholder="Email">
+      <input type="password" id="signupPassword" placeholder="Password">
+      <button id="signupBtn">Sign Up</button>
 
-function parseBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', () => resolve(qs.parse(body)));
-    req.on('error', reject);
-  });
-}
+      <hr>
+
+      <input type="email" id="loginEmail" placeholder="Email">
+      <input type="password" id="loginPassword" placeholder="Password">
+      <button id="loginBtn">Login</button>
+
+      <p class="msg" id="message"></p>
+
+      <br>
+      <a href="/landing">Go to Landing Page</a>
+    </div>
+
+    <script type="module">
+      import { auth, db } from "/firebase.js";
+      import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+      import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+      const message = document.getElementById("message");
+
+      document.getElementById("signupBtn").addEventListener("click", async () => {
+        const username = document.getElementById("signupUsername").value;
+        const email = document.getElementById("signupEmail").value;
+        const password = document.getElementById("signupPassword").value;
+
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+
+          await setDoc(doc(db, "users", user.uid), {
+            username: username,
+            email: email,
+            createdAt: new Date().toISOString()
+          });
+
+          message.textContent = "Signup successful";
+        } catch (err) {
+          message.textContent = err.message;
+        }
+      });
+
+      document.getElementById("loginBtn").addEventListener("click", async () => {
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+          window.location.href = "/dashboard";
+        } catch (err) {
+          message.textContent = "Invalid email or password";
+        }
+      });
+    </script>
+  </body>
+  </html>
+`;
+
+const landingPage = `
+  <html>
+  <head>
+    <title>Landing Page</title>
+  </head>
+  <body>
+    <h1>Welcome to the Landing Page</h1>
+    <p>This is a separate page.</p>
+    <a href="/">Back to Login / Sign Up</a>
+  </body>
+  </html>
+`;
+
+const dashboardPage = `
+  <html>
+  <head>
+    <title>Dashboard</title>
+  </head>
+  <body>
+    <h1>Welcome to your dashboard</h1>
+    <p>You logged in successfully.</p>
+    <a href="/">Log out</a>
+  </body>
+  </html>
+`;
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(200, {'Content-Type': 'text/html'});
-    res.end(`
-      <html>
-      <head>
-        <title>Login Page</title>
-        <style>
-          body { display:flex; justify-content:center; align-items:center; height:100vh; margin:0; font-family:Arial,sans-serif; background:#f0f0f0; }
-          .login-box { background:white; padding:2rem; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.2); text-align:center; }
-          input { display:block; width:100%; padding:0.5rem; margin:0.5rem 0; }
-          button { padding:0.5rem 1rem; margin-top:1rem; }
-        </style>
-      </head>
-      <body>
-        <div class="login-box">
-          <h2>Login / Sign Up</h2>
-          <form method="POST" action="/login">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">Login</button>
-          </form>
-          <form method="POST" action="/signup">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">Sign Up</button>
-          </form>
-        </div>
-      </body>
-      </html>
-    `);
+    res.end(homePage);
   } 
-  else if (req.method === 'POST' && req.url === '/signup') {
-    const { username, password } = await parseBody(req);
-    const hash = await bcrypt.hash(password, 10); // hash the password
+  else if (req.method === 'GET' && req.url === '/landing') {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.end(landingPage);
+  }
+  else if (req.method === 'GET' && req.url === '/dashboard') {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.end(dashboardPage);
+  }
+  else if (req.method === 'GET' && req.url === '/firebase.js') {
+    const fs = require('fs');
+    const path = require('path');
+    const firebaseFile = path.join(__dirname, 'firebase.js');
 
-    db.run('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hash], function(err) {
+    fs.readFile(firebaseFile, 'utf8', (err, data) => {
       if (err) {
-        res.writeHead(400, {'Content-Type': 'text/plain'});
-        res.end('Username already exists or error');
-      } else {
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end('Signup successful');
+        res.writeHead(500, {'Content-Type': 'text/plain'});
+        res.end('Error loading firebase.js');
+        return;
       }
-    });
-  } 
-  else if (req.method === 'POST' && req.url === '/login') {
-    const { username, password } = await parseBody(req);
 
-    db.get('SELECT password_hash FROM users WHERE username = ?', [username], async (err, row) => {
-      if (err || !row) {
-        res.writeHead(401, {'Content-Type': 'text/plain'});
-        res.end('Invalid username or password');
-      } else {
-        const match = await bcrypt.compare(password, row.password_hash);
-        if (match) {
-          res.writeHead(200, {'Content-Type': 'text/plain'});
-          res.end('Login successful');
-        } else {
-          res.writeHead(401, {'Content-Type': 'text/plain'});
-          res.end('Invalid username or password');
-        }
-      }
+      res.writeHead(200, {'Content-Type': 'application/javascript'});
+      res.end(data);
     });
-  } 
+  }
   else {
     res.writeHead(404, {'Content-Type': 'text/plain'});
     res.end('Not Found');
