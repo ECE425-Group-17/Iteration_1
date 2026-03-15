@@ -5,11 +5,43 @@ const homePage = `
   <head>
     <title>Login Page</title>
     <style>
-      body { display:flex; justify-content:center; align-items:center; height:100vh; margin:0; font-family:Arial,sans-serif; background:#f0f0f0; }
-      .login-box { background:white; padding:2rem; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.2); text-align:center; width:300px; }
-      input { display:block; width:100%; padding:0.5rem; margin:0.5rem 0; box-sizing:border-box; }
-      button { padding:0.5rem 1rem; margin-top:1rem; width:100%; }
-      .msg { margin-top:1rem; color:#333; font-size:14px; }
+      body {
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:100vh;
+        margin:0;
+        font-family:Arial,sans-serif;
+        background:#f0f0f0;
+      }
+      .login-box {
+        background:white;
+        padding:2rem;
+        border-radius:8px;
+        box-shadow:0 0 10px rgba(0,0,0,0.2);
+        text-align:center;
+        width:320px;
+      }
+      input {
+        display:block;
+        width:100%;
+        padding:0.5rem;
+        margin:0.5rem 0;
+        box-sizing:border-box;
+      }
+      button {
+        padding:0.5rem 1rem;
+        margin-top:0.5rem;
+        width:100%;
+      }
+      .msg {
+        margin-top:1rem;
+        color:#333;
+        font-size:14px;
+      }
+      hr {
+        margin:1rem 0;
+      }
     </style>
   </head>
   <body>
@@ -27,6 +59,11 @@ const homePage = `
       <input type="password" id="loginPassword" placeholder="Password">
       <button id="loginBtn">Login</button>
 
+      <hr>
+
+      <input type="email" id="resetEmail" placeholder="Enter email for password reset">
+      <button id="resetBtn">Send Password Reset Email</button>
+
       <p class="msg" id="message"></p>
 
       <br>
@@ -35,15 +72,26 @@ const homePage = `
 
     <script type="module">
       import { auth, db } from "/firebase.js";
-      import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+      import {
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        sendEmailVerification,
+        sendPasswordResetEmail,
+        signOut
+      } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
       import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
       const message = document.getElementById("message");
 
       document.getElementById("signupBtn").addEventListener("click", async () => {
-        const username = document.getElementById("signupUsername").value;
-        const email = document.getElementById("signupEmail").value;
+        const username = document.getElementById("signupUsername").value.trim();
+        const email = document.getElementById("signupEmail").value.trim();
         const password = document.getElementById("signupPassword").value;
+
+        if (!username || !email || !password) {
+          message.textContent = "Please fill in all sign up fields.";
+          return;
+        }
 
         try {
           const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -55,21 +103,64 @@ const homePage = `
             createdAt: new Date().toISOString()
           });
 
-          message.textContent = "Signup successful";
+          await sendEmailVerification(user);
+
+          message.textContent = "Signup successful. Verification email sent. Please verify before logging in.";
         } catch (err) {
           message.textContent = err.message;
         }
       });
 
       document.getElementById("loginBtn").addEventListener("click", async () => {
-        const email = document.getElementById("loginEmail").value;
+        const email = document.getElementById("loginEmail").value.trim();
         const password = document.getElementById("loginPassword").value;
 
+        if (!email || !password) {
+          message.textContent = "Please enter your email and password.";
+          return;
+        }
+
         try {
-          await signInWithEmailAndPassword(auth, email, password);
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+
+          await user.reload();
+
+          if (!user.emailVerified) {
+            message.innerHTML = 'Your email is not verified yet.<br><button id="resendVerificationBtn">Resend Verification Email</button>';
+
+            document.getElementById("resendVerificationBtn").addEventListener("click", async () => {
+              try {
+                await sendEmailVerification(user);
+                message.textContent = "Verification email resent. Check your inbox.";
+              } catch (err) {
+                message.textContent = err.message;
+              }
+            });
+
+            await signOut(auth);
+            return;
+          }
+
           window.location.href = "/dashboard";
         } catch (err) {
           message.textContent = "Invalid email or password";
+        }
+      });
+
+      document.getElementById("resetBtn").addEventListener("click", async () => {
+        const email = document.getElementById("resetEmail").value.trim();
+
+        if (!email) {
+          message.textContent = "Please enter your email for password reset.";
+          return;
+        }
+
+        try {
+          await sendPasswordResetEmail(auth, email);
+          message.textContent = "Password reset email sent. Check your inbox.";
+        } catch (err) {
+          message.textContent = err.message;
         }
       });
     </script>
