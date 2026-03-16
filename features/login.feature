@@ -1,5 +1,9 @@
 Feature: Login
 
+  As a user
+  I want to login
+  So that I can access my existing account
+
   Scenario: User logs into an existing account
     Given the browser is open
     When the user goes to the home page
