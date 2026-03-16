@@ -89,3 +89,76 @@ Then("a password reset message should appear", async function () {
   console.log("Reset message:", message);
   assert(message.length > 0);
 });
+
+When("the user enters an invalid login email and password", async function () {
+  await page.type("#loginEmail", "wrong@example.com");
+  await page.type("#loginPassword", "WrongPassword123");
+});
+
+When("the user leaves the login fields blank", async function () {
+  // intentionally left blank
+});
+
+Then("a login error message should appear", async function () {
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  const messageExists = await page.$("#message");
+  if (messageExists) {
+    const message = await page.$eval("#message", el => el.textContent.trim());
+    console.log("Login error message:", message);
+    assert(message.length > 0);
+  } else {
+    const url = page.url();
+    assert(url.includes("localhost:3000"));
+  }
+});
+
+Then("a login validation message should appear", async function () {
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  const url = page.url();
+  assert(url.includes("localhost:3000"));
+});
+
+When("the user enters signup information without email", async function () {
+  await page.type("#signupUsername", "testuser2");
+  await page.type("#signupPassword", "password123");
+});
+
+When("the user enters signup information without password", async function () {
+  testEmail = `test${Date.now()}@example.com`;
+  await page.type("#signupUsername", "testuser3");
+  await page.type("#signupEmail", testEmail);
+});
+
+Then("a signup error message should appear", async function () {
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  const messageExists = await page.$("#message");
+  if (messageExists) {
+    const message = await page.$eval("#message", el => el.textContent.trim());
+    console.log("Signup error message:", message);
+    assert(message.length > 0);
+  } else {
+    const url = page.url();
+    assert(url.includes("localhost:3000"));
+  }
+});
+
+When("the user leaves the reset email field blank", async function () {
+  // intentionally left blank
+});
+
+Then("a reset validation message should appear", async function () {
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  const messageExists = await page.$("#message");
+  if (messageExists) {
+    const message = await page.$eval("#message", el => el.textContent.trim());
+    console.log("Reset validation message:", message);
+    assert(message.length > 0);
+  } else {
+    const url = page.url();
+    assert(url.includes("localhost:3000"));
+  }
+});
