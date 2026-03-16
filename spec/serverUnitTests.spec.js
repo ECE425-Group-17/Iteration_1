@@ -90,4 +90,26 @@ describe('handleRequest function', () => {
     expect(result.body).toBe('Not Found');
   });
 
+  it("should return 404 for POST /", () => {
+    const req = { method: "POST", url: "/" };
+    const res = createMockRes();
+
+    handleRequest(req, res);
+    const result = res.getResult();
+
+    expect(result.statusCode).toBe(404);
+    expect(result.body).toBe("Not Found");
+  });
+
+  it("should return plain text content type for unknown routes", () => {
+    const req = { method: "GET", url: "/unknown" };
+    const res = createMockRes();
+
+    handleRequest(req, res);
+    const result = res.getResult();
+
+    expect(result.statusCode).toBe(404);
+    expect(result.headers["Content-Type"]).toBe("text/plain");
+  });
+
 });
