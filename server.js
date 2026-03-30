@@ -1,4 +1,5 @@
 const http = require('http');
+const { handleChat } = require('./chat.js');
 
 const homePage = `
   <html>
@@ -171,12 +172,49 @@ const homePage = `
 const landingPage = `
   <html>
   <head>
-    <title>Landing Page</title>
+    <title>Front page</title>
   </head>
   <body>
-    <h1>Welcome to the Landing Page</h1>
-    <p>This is a separate page.</p>
-    <a href="/">Back to Login / Sign Up</a>
+  <h2>Chat</h2>
+  <div id="chat-box" style="border:1px solid #ccc; 
+    height:200px;
+    overflow-y:scroll;
+    margin-bottom:10px;
+    padding:10px;">
+  </div>
+
+  <input type="text" id="userInput" placeholder="Type a message...">
+  <button onclick="sendChat()">Send</button>
+  <br><br>
+  <a href="/">Logout</a>
+
+  <script>
+    async function sendChat(){
+    const input = document.getElementById('userInput');
+    const box = document.getElementById('chat-box');
+    const message = input.value;
+    if (!message) return;
+
+    //show user message
+    box.innerHTML += '<div><b>You: </b>' + message + '</div>';
+    input.value = '';
+
+    try{
+    const response = await fetch('/api/chat',{
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({message})
+    });
+    const data = await response.json();
+    
+    //show LLM response    
+    box.scrollTop = box.scrollHeight;
+    box.innerHTML += '<div><b>AI:</b> ' + data.reply + '</div>';
+    } catch (err){
+      box.innerHTML += '<div><i>Error connecting to server.</i></div>';
+      }
+    }
+  </script>
   </body>
   </html>
 `;
@@ -206,6 +244,21 @@ const server = http.createServer(async (req, res) => {
   else if (req.method === 'GET' && req.url === '/dashboard') {
     res.writeHead(200, {'Content-Type': 'text/html'});
     res.end(dashboardPage);
+  }
+ else if (req.method === 'POST' && req.url === '/api/chat') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const parsedBody = JSON.parse(body);
+        const aiReply = await handleChat(parsedBody.message);
+        res.writeHead(200, {'Content-Type': 'application/json'});
+        res.end(JSON.stringify({reply: aiReply}));
+      } catch (err) {
+        res.writeHead(500);
+        res.end(JSON.stringify({reply: "Error: Ollama is not responding."}));
+      }
+    });
   }
   else if (req.method === 'GET' && req.url === '/firebase.js') {
     const fs = require('fs');
