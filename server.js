@@ -176,7 +176,7 @@ const landingPage = `
   </head>
   <body>
   <h2>Chat</h2>
-  <div id="chat-box" style="border:1px solid #ccc; 
+  <div id="chat-box" style="border:1px solid #ccc;
     height:200px;
     overflow-y:scroll;
     margin-bottom:10px;
@@ -207,7 +207,7 @@ const landingPage = `
     });
     const data = await response.json();
     
-    //show LLM response    
+    //show LLM response
     box.scrollTop = box.scrollHeight;
     box.innerHTML += '<div><b>AI:</b> ' + data.reply + '</div>';
     } catch (err){
