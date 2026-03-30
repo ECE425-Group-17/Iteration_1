@@ -5,7 +5,7 @@ async function handleChat(userMessage){
             headers:{ 'Content-type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'llama3.1:latest',
+                model: 'gemma3',
                 prompt: userMessage,
                 stream: false
             })
