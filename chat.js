@@ -6,7 +6,7 @@ async function handleChat(userMessage) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama',
+        model: 'llama3',
         prompt: userMessage,
         stream: false
       })
