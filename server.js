@@ -498,6 +498,7 @@ const dashboardPage = `
         <button id="logoutBtn">Log out</button>
       </aside>
 
+      
       <div class="main-panel">
         <div class="top-bar">
           <div>
@@ -755,43 +756,43 @@ const dashboardPage = `
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(homePage);
-  } 
+  }
   else if (req.method === 'GET' && req.url === '/signup') {
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(signUpPage);
   }
   else if (req.method === 'GET' && req.url === '/reset-password') {
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(resetPasswordPage);
   }
   else if (req.method === 'GET' && req.url === '/landing') {
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(landingPage);
   }
   else if (req.method === 'GET' && req.url === '/dashboard') {
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(dashboardPage);
   }
- else if (req.method === 'POST' && req.url === '/api/chat') {
+  else if (req.method === 'POST' && req.url === '/api/chat') {
     let body = '';
     req.on('data', chunk => { body += chunk.toString(); });
     req.on('end', async () => {
       try {
         const parsedBody = JSON.parse(body);
         if (!parsedBody.message || !parsedBody.message.trim()) {
-          res.writeHead(400, {'Content-Type': 'application/json'});
-          res.end(JSON.stringify({reply: "Please enter a message before sending."}));
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
           return;
         }
 
         const aiReply = await handleChat(parsedBody.message);
-        res.writeHead(200, {'Content-Type': 'application/json'});
-        res.end(JSON.stringify({reply: aiReply}));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reply: aiReply }));
       } catch (err) {
-        res.writeHead(500, {'Content-Type': 'application/json'});
-        res.end(JSON.stringify({reply: err.message}));
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reply: err.message }));
       }
     });
   }
@@ -802,17 +803,17 @@ const server = http.createServer(async (req, res) => {
 
     fs.readFile(firebaseFile, 'utf8', (err, data) => {
       if (err) {
-        res.writeHead(500, {'Content-Type': 'text/plain'});
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end('Error loading firebase.js');
         return;
       }
 
-      res.writeHead(200, {'Content-Type': 'application/javascript'});
+      res.writeHead(200, { 'Content-Type': 'application/javascript' });
       res.end(data);
     });
   }
   else {
-    res.writeHead(404, {'Content-Type': 'text/plain'});
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');
   }
 });
