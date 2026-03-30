@@ -143,6 +143,7 @@ const homePage = `
             return;
           }
 
+          sessionStorage.setItem("loggedInUserEmail", user.email);
           window.location.href = "/dashboard";
         } catch (err) {
           message.textContent = "Invalid email or password";
@@ -175,46 +176,9 @@ const landingPage = `
     <title>Front page</title>
   </head>
   <body>
-  <h2>Chat</h2>
-  <div id="chat-box" style="border:1px solid #ccc;
-    height:200px;
-    overflow-y:scroll;
-    margin-bottom:10px;
-    padding:10px;">
-  </div>
-
-  <input type="text" id="userInput" placeholder="Type a message...">
-  <button onclick="sendChat()">Send</button>
-  <br><br>
-  <a href="/">Logout</a>
-
-  <script>
-    async function sendChat(){
-    const input = document.getElementById('userInput');
-    const box = document.getElementById('chat-box');
-    const message = input.value;
-    if (!message) return;
-
-    //show user message
-    box.innerHTML += '<div><b>You: </b>' + message + '</div>';
-    input.value = '';
-
-    try{
-    const response = await fetch('/api/chat',{
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({message})
-    });
-    const data = await response.json();
-    
-    //show LLM response
-    box.scrollTop = box.scrollHeight;
-    box.innerHTML += '<div><b>AI:</b> ' + data.reply + '</div>';
-    } catch (err){
-      box.innerHTML += '<div><i>Error connecting to server.</i></div>';
-      }
-    }
-  </script>
+    <h1>Welcome</h1>
+    <p>Please log in to use the chat assistant.</p>
+    <a href="/">Go to Login</a>
   </body>
   </html>
 `;
@@ -223,11 +187,409 @@ const dashboardPage = `
   <html>
   <head>
     <title>Dashboard</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #eef1f4;
+      }
+      .container {
+        max-width: 1180px;
+        min-height: calc(100vh - 48px);
+        margin: 24px auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        display: flex;
+      }
+      .sidebar {
+        width: 280px;
+        background: #1f2937;
+        color: white;
+        padding: 18px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .sidebar h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+      .sidebar button {
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        padding: 11px 14px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .sidebar .new-chat-btn {
+        background: #f59e0b;
+        color: #111827;
+        font-weight: bold;
+      }
+      #conversation-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow-y: auto;
+        max-height: 70vh;
+      }
+      .conversation-item {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 12px;
+        cursor: pointer;
+      }
+      .conversation-item.active {
+        background: rgba(245, 158, 11, 0.18);
+        border-color: #f59e0b;
+      }
+      .conversation-title {
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      .conversation-preview {
+        font-size: 13px;
+        color: #d1d5db;
+      }
+      .main-panel {
+        flex: 1;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+      }
+      .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+      }
+      .top-bar h1 {
+        margin-bottom: 8px;
+      }
+      #chat-box {
+        border: 1px solid #ccc;
+        flex: 1;
+        min-height: 320px;
+        overflow-y: auto;
+        margin: 20px 0 12px;
+        padding: 12px;
+        background: #fafafa;
+        border-radius: 10px;
+      }
+      .chat-row {
+        margin-bottom: 10px;
+        line-height: 1.4;
+        padding: 10px 12px;
+        border-radius: 10px;
+        max-width: 85%;
+      }
+      .chat-row.user {
+        color: #1f4d8f;
+        background: #dbeafe;
+        margin-left: auto;
+      }
+      .chat-row.ai {
+        color: #1b5e20;
+        background: #dcfce7;
+      }
+      .chat-row.system {
+        color: #8a1c1c;
+        background: #fee2e2;
+        max-width: 100%;
+      }
+      .composer {
+        display: flex;
+        gap: 10px;
+      }
+      .composer input {
+        flex: 1;
+        padding: 10px;
+      }
+      .composer button,
+      .top-bar button {
+        padding: 10px 14px;
+        cursor: pointer;
+        width: auto;
+      }
+      .helper-text {
+        color: #666;
+        font-size: 14px;
+      }
+      #conversation-name {
+        color: #374151;
+        font-size: 14px;
+        margin-top: 6px;
+      }
+    </style>
   </head>
   <body>
-    <h1>Welcome to your dashboard</h1>
-    <p>You logged in successfully.</p>
-    <a href="/">Log out</a>
+    <div class="container">
+      <aside class="sidebar">
+        <div>
+          <h2>Your Chats</h2>
+          <p class="helper-text" style="color:#d1d5db;">Create a new conversation or reopen an older one.</p>
+        </div>
+        <button class="new-chat-btn" id="newChatBtn">+ New Chat</button>
+        <div id="conversation-list"></div>
+        <button id="logoutBtn">Log out</button>
+      </aside>
+
+      <div class="main-panel">
+        <div class="top-bar">
+          <div>
+            <h1>Welcome to your dashboard</h1>
+            <p class="helper-text">Your chats are organized by conversation for this signed-in user.</p>
+            <div id="conversation-name"></div>
+          </div>
+          <button id="clearBtn">Delete Current Chat</button>
+        </div>
+
+        <h2>Chat with Ollama</h2>
+        <div id="chat-box"></div>
+
+        <div class="composer">
+          <input type="text" id="userInput" placeholder="Type a message...">
+          <button id="sendBtn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const userEmail = sessionStorage.getItem("loggedInUserEmail");
+
+      if (!userEmail) {
+        window.location.href = "/";
+      }
+
+      const chatBox = document.getElementById("chat-box");
+      const userInput = document.getElementById("userInput");
+      const conversationList = document.getElementById("conversation-list");
+      const conversationName = document.getElementById("conversation-name");
+      const conversationStoreKey = "chatConversations:" + userEmail;
+      const activeConversationKey = "activeConversation:" + userEmail;
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function getConversationStore() {
+        const saved = localStorage.getItem(conversationStoreKey);
+        if (!saved) {
+          return [];
+        }
+
+        try {
+          const parsed = JSON.parse(saved);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          console.error("Could not parse conversation store:", err);
+          return [];
+        }
+      }
+
+      function saveConversationStore(conversations) {
+        localStorage.setItem(conversationStoreKey, JSON.stringify(conversations));
+      }
+
+      function createConversation(title) {
+        return {
+          id: "conversation-" + Date.now() + "-" + Math.random().toString(16).slice(2),
+          title: title || "New Chat",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: []
+        };
+      }
+
+      function getActiveConversationId() {
+        return localStorage.getItem(activeConversationKey);
+      }
+
+      function setActiveConversationId(conversationId) {
+        localStorage.setItem(activeConversationKey, conversationId);
+      }
+
+      function ensureConversationState() {
+        const conversations = getConversationStore();
+        const activeId = getActiveConversationId();
+
+        if (conversations.length === 0) {
+          const starterConversation = createConversation("New Chat");
+          saveConversationStore([starterConversation]);
+          setActiveConversationId(starterConversation.id);
+          return [starterConversation];
+        }
+
+        if (!activeId || !conversations.some(conversation => conversation.id === activeId)) {
+          setActiveConversationId(conversations[0].id);
+        }
+
+        return conversations;
+      }
+
+      function getActiveConversation() {
+        const conversations = ensureConversationState();
+        const activeId = getActiveConversationId();
+        return conversations.find(conversation => conversation.id === activeId) || conversations[0];
+      }
+
+      function updateConversation(updatedConversation) {
+        const conversations = ensureConversationState().map(conversation =>
+          conversation.id === updatedConversation.id ? updatedConversation : conversation
+        );
+        saveConversationStore(conversations);
+      }
+
+      function createTitleFromMessage(message) {
+        return message.length > 28 ? message.slice(0, 28) + "..." : message;
+      }
+
+      function renderConversationList() {
+        const conversations = ensureConversationState()
+          .slice()
+          .sort((a, b) => b.updatedAt - a.updatedAt);
+        const activeId = getActiveConversationId();
+
+        conversationList.innerHTML = "";
+
+        conversations.forEach(conversation => {
+          const item = document.createElement("div");
+          item.className = "conversation-item" + (conversation.id === activeId ? " active" : "");
+
+          const previewText = conversation.messages.length > 0
+            ? conversation.messages[conversation.messages.length - 1].text
+            : "No messages yet";
+
+          item.innerHTML =
+            '<div class="conversation-title">' + escapeHtml(conversation.title) + '</div>' +
+            '<div class="conversation-preview">' + escapeHtml(previewText.slice(0, 45)) + '</div>';
+
+          item.addEventListener("click", () => {
+            setActiveConversationId(conversation.id);
+            renderConversationList();
+            renderActiveConversation();
+          });
+
+          conversationList.appendChild(item);
+        });
+      }
+
+      function appendMessage(role, text) {
+        const row = document.createElement("div");
+        row.className = "chat-row " + role;
+        row.innerHTML = "<b>" + role.toUpperCase() + ":</b> " + escapeHtml(text);
+        chatBox.appendChild(row);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      function renderActiveConversation() {
+        const activeConversation = getActiveConversation();
+        chatBox.innerHTML = "";
+        conversationName.textContent = "Current conversation: " + activeConversation.title;
+
+        if (activeConversation.messages.length === 0) {
+          appendMessage("system", "No messages yet. Start a new conversation.");
+          return;
+        }
+
+        activeConversation.messages.forEach(entry => appendMessage(entry.role, entry.text));
+      }
+
+      function createNewConversation() {
+        const conversations = ensureConversationState();
+        const conversation = createConversation("New Chat");
+        conversations.unshift(conversation);
+        saveConversationStore(conversations);
+        setActiveConversationId(conversation.id);
+        renderConversationList();
+        renderActiveConversation();
+        userInput.focus();
+      }
+
+      async function sendChat() {
+        const message = userInput.value.trim();
+        if (!message) {
+          return;
+        }
+
+        const activeConversation = getActiveConversation();
+        activeConversation.messages.push({ role: "user", text: message });
+        activeConversation.updatedAt = Date.now();
+        if (activeConversation.messages.length === 1) {
+          activeConversation.title = createTitleFromMessage(message);
+        }
+        updateConversation(activeConversation);
+        renderConversationList();
+        renderActiveConversation();
+        userInput.value = "";
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message })
+          });
+
+          const data = await response.json();
+          const updatedConversation = getActiveConversation();
+          updatedConversation.messages.push({ role: "ai", text: data.reply });
+          updatedConversation.updatedAt = Date.now();
+          updateConversation(updatedConversation);
+          renderConversationList();
+          renderActiveConversation();
+        } catch (err) {
+          const updatedConversation = getActiveConversation();
+          updatedConversation.messages.push({ role: "system", text: "Error connecting to the app server." });
+          updatedConversation.updatedAt = Date.now();
+          updateConversation(updatedConversation);
+          renderConversationList();
+          renderActiveConversation();
+        }
+      }
+
+      document.getElementById("sendBtn").addEventListener("click", sendChat);
+      document.getElementById("newChatBtn").addEventListener("click", createNewConversation);
+      userInput.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+          sendChat();
+        }
+      });
+
+      document.getElementById("clearBtn").addEventListener("click", () => {
+        const activeConversationId = getActiveConversationId();
+        const remainingConversations = ensureConversationState().filter(
+          conversation => conversation.id !== activeConversationId
+        );
+
+        if (remainingConversations.length === 0) {
+          const replacementConversation = createConversation("New Chat");
+          saveConversationStore([replacementConversation]);
+          setActiveConversationId(replacementConversation.id);
+        } else {
+          saveConversationStore(remainingConversations);
+          setActiveConversationId(remainingConversations[0].id);
+        }
+
+        renderConversationList();
+        renderActiveConversation();
+      });
+
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        sessionStorage.removeItem("loggedInUserEmail");
+        window.location.href = "/";
+      });
+
+      ensureConversationState();
+      renderConversationList();
+      renderActiveConversation();
+    </script>
   </body>
   </html>
 `;
@@ -251,12 +613,18 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const parsedBody = JSON.parse(body);
+        if (!parsedBody.message || !parsedBody.message.trim()) {
+          res.writeHead(400, {'Content-Type': 'application/json'});
+          res.end(JSON.stringify({reply: "Please enter a message before sending."}));
+          return;
+        }
+
         const aiReply = await handleChat(parsedBody.message);
         res.writeHead(200, {'Content-Type': 'application/json'});
         res.end(JSON.stringify({reply: aiReply}));
       } catch (err) {
-        res.writeHead(500);
-        res.end(JSON.stringify({reply: "Error: Ollama is not responding."}));
+        res.writeHead(500, {'Content-Type': 'application/json'});
+        res.end(JSON.stringify({reply: err.message}));
       }
     });
   }
