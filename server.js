@@ -1,4 +1,6 @@
+const fs = require('fs');
 const http = require('http');
+const path = require('path');
 const { handleChat } = require('./chat.js');
 
 const homePage = `
@@ -754,70 +756,79 @@ const dashboardPage = `
   </html>
 `;
 
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(homePage);
-  }
-  else if (req.method === 'GET' && req.url === '/signup') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(signUpPage);
-  }
-  else if (req.method === 'GET' && req.url === '/reset-password') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(resetPasswordPage);
-  }
-  else if (req.method === 'GET' && req.url === '/landing') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(landingPage);
-  }
-  else if (req.method === 'GET' && req.url === '/dashboard') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(dashboardPage);
-  }
-  else if (req.method === 'POST' && req.url === '/api/chat') {
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', async () => {
-      try {
-        const parsedBody = JSON.parse(body);
-        if (!parsedBody.message || !parsedBody.message.trim()) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
+function createRequestListener(chatHandler = handleChat) {
+  return async (req, res) => {
+    if (req.method === 'GET' && req.url === '/') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(homePage);
+    }
+    else if (req.method === 'GET' && req.url === '/signup') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(signUpPage);
+    }
+    else if (req.method === 'GET' && req.url === '/reset-password') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(resetPasswordPage);
+    }
+    else if (req.method === 'GET' && req.url === '/landing') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(landingPage);
+    }
+    else if (req.method === 'GET' && req.url === '/dashboard') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(dashboardPage);
+    }
+    else if (req.method === 'POST' && req.url === '/api/chat') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          const parsedBody = JSON.parse(body);
+          if (!parsedBody.message || !parsedBody.message.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
+            return;
+          }
+
+          const aiReply = await chatHandler(parsedBody.message);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ reply: aiReply }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ reply: err.message }));
+        }
+      });
+    }
+    else if (req.method === 'GET' && req.url === '/firebase.js') {
+      const firebaseFile = path.join(__dirname, 'firebase.js');
+
+      fs.readFile(firebaseFile, 'utf8', (err, data) => {
+        if (err) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Error loading firebase.js');
           return;
         }
 
-        const aiReply = await handleChat(parsedBody.message);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ reply: aiReply }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ reply: err.message }));
-      }
-    });
-  }
-  else if (req.method === 'GET' && req.url === '/firebase.js') {
-    const fs = require('fs');
-    const path = require('path');
-    const firebaseFile = path.join(__dirname, 'firebase.js');
+        res.writeHead(200, { 'Content-Type': 'application/javascript' });
+        res.end(data);
+      });
+    }
+    else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    }
+  };
+}
 
-    fs.readFile(firebaseFile, 'utf8', (err, data) => {
-      if (err) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Error loading firebase.js');
-        return;
-      }
+function createServer(chatHandler = handleChat) {
+  return http.createServer(createRequestListener(chatHandler));
+}
 
-      res.writeHead(200, { 'Content-Type': 'application/javascript' });
-      res.end(data);
-    });
-  }
-  else {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not Found');
-  }
-});
+if (require.main === module) {
+  const server = createServer();
+  server.listen(3000, () => {
+    console.log('Server running on http://localhost:3000');
+  });
+}
 
-server.listen(3000, () => {
-  console.log('Server running on http://localhost:3000');
-});
+module.exports = { createRequestListener, createServer };
