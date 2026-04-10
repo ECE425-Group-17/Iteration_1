@@ -6,7 +6,7 @@ async function handleChat(userMessage) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gemma3',
+        model: 'gemma4:e4b',
         prompt: userMessage,
         stream: false
       })
@@ -19,7 +19,7 @@ async function handleChat(userMessage) {
     const data = await response.json();
     return data.response;
   } catch (err) {
-    console.error('---Agent Error---');
+    console.error('Error');
     console.error(err.message);
     throw new Error(`Unable to reach Ollama at http://127.0.0.1:11434. ${err.message}`);
   }
