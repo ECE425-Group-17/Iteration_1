@@ -40,6 +40,9 @@ describe("Dashboard And Page Routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('Welcome to your dashboard');
     expect(response.body).toContain('Delete Current Chat');
+    expect(response.body).toContain('Chat with 3 LLMs');
+    expect(response.body).toContain('Regenerate');
+    expect(response.body).toContain('Font Size');
   });
 
   it("serves firebase.js for the frontend", async () => {
