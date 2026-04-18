@@ -118,6 +118,12 @@ const homePage = `
         }
       });
 
+      document.getElementById("loginPassword").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          document.getElementById("loginBtn").click();
+        }
+      });
+
       document.getElementById("goSignupBtn").addEventListener("click", () => {
         window.location.href = "/signup";
       });
@@ -231,6 +237,12 @@ const signUpPage = `
         }
       });
 
+      document.getElementById("signupPassword").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          document.getElementById("signupBtn").click();
+        }
+      });
+
       document.getElementById("backToLoginBtn").addEventListener("click", () => {
         window.location.href = "/";
       });
@@ -320,6 +332,12 @@ const resetPasswordPage = `
           message.textContent = "Password reset email sent. Check your inbox.";
         } catch (err) {
           message.textContent = err.message;
+        }
+      });
+
+      document.getElementById("resetEmail").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          document.getElementById("resetBtn").click();
         }
       });
 
