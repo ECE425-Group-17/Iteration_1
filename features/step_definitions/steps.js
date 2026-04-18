@@ -117,3 +117,36 @@ Given('I am logged in on the dashboard chat page', async function () {
   await page.waitForSelector('#sendBtn');
   await page.waitForSelector('#chat-box');
 });
+
+When('I start a multi chat', async function () {
+  await page.waitForSelector('#multiChatBtn');
+  await page.click('#multiChatBtn');
+});
+
+Then('I should see multiple bot responses', { timeout: 90000 }, async function () {
+  const timeout = 90000;
+
+  await page.waitForFunction(() => {
+    return document.querySelectorAll('.chat-row.ai').length >= 3;
+  }, { timeout });
+
+  const responses = await page.$$eval('.chat-row.ai', els =>
+    els.map(e => e.innerText.trim())
+  );
+
+  assert(responses.length >= 3);
+});
+
+Then('the bot responses should not all be identical', async function () {
+  const responses = await page.$$eval('.chat-row.ai', els =>
+    els.map(e => e.innerText.trim())
+  );
+
+  const unique = new Set(responses);
+  assert(unique.size > 1);
+});
+
+Then('the current conversation should be multi chat', async function () {
+  const title = await page.$eval('#conversation-name', el => el.innerText);
+  assert(title.toLowerCase().includes('multi'));
+});

@@ -496,6 +496,7 @@ const dashboardPage = `
           <p class="helper-text" style="color:#d1d5db;">Create a new conversation or reopen an older one.</p>
         </div>
         <button class="new-chat-btn" id="newChatBtn">+ New Chat</button>
+        <button class="new-chat-btn" id="multiChatBtn">+ Multi Chat</button>
         <div id="conversation-list"></div>
         <button id="logoutBtn">Log out</button>
       </aside>
@@ -560,14 +561,26 @@ const dashboardPage = `
         localStorage.setItem(conversationStoreKey, JSON.stringify(conversations));
       }
 
-      function createConversation(title) {
+      function createConversation(title, mode = "single") {
         return {
           id: "conversation-" + Date.now() + "-" + Math.random().toString(16).slice(2),
           title: title || "New Chat",
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          messages: []
+          messages: [],
+          mode // "single" or "multi"
         };
+      }
+
+      function createMultiConversation() {
+        const conversations = ensureConversationState();
+        const conversation = createConversation("Multi Chat", "multi");
+        conversations.unshift(conversation);
+        saveConversationStore(conversations);
+        setActiveConversationId(conversation.id);
+        renderConversationList();
+        renderActiveConversation();
+        userInput.focus();
       }
 
       function getActiveConversationId() {
@@ -643,10 +656,13 @@ const dashboardPage = `
         });
       }
 
-      function appendMessage(role, text) {
+      function appendMessage(role, text, model = null) {
         const row = document.createElement("div");
         row.className = "chat-row " + role;
-        row.innerHTML = "<b>" + role.toUpperCase() + ":</b> " + escapeHtml(text);
+
+        const label = model ? model : role.toUpperCase();
+        row.innerHTML = "<b>" + label + ":</b> " + escapeHtml(text);
+
         chatBox.appendChild(row);
         chatBox.scrollTop = chatBox.scrollHeight;
       }
@@ -661,7 +677,9 @@ const dashboardPage = `
           return;
         }
 
-        activeConversation.messages.forEach(entry => appendMessage(entry.role, entry.text));
+        activeConversation.messages.forEach((entry, i) => {
+          appendMessage(entry.role, entry.text, entry.model || null);
+        });
       }
 
       function createNewConversation() {
@@ -693,7 +711,11 @@ const dashboardPage = `
         userInput.value = "";
 
         try {
-          const response = await fetch("/api/chat", {
+          const endpoint = activeConversation.mode === "multi"
+            ? "/api/chat-multi"
+            : "/api/chat";
+
+          const response = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message })
@@ -701,7 +723,19 @@ const dashboardPage = `
 
           const data = await response.json();
           const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "ai", text: data.reply });
+
+          if (activeConversation.mode === "multi") {
+            data.replies.forEach(reply => {
+              updatedConversation.messages.push({
+                role: "ai",
+                text: reply.text,
+                model: reply.model
+              });
+            });
+          } else {
+            updatedConversation.messages.push({ role: "ai", text: data.reply });
+          }
+
           updatedConversation.updatedAt = Date.now();
           updateConversation(updatedConversation);
           renderConversationList();
@@ -718,6 +752,7 @@ const dashboardPage = `
 
       document.getElementById("sendBtn").addEventListener("click", sendChat);
       document.getElementById("newChatBtn").addEventListener("click", createNewConversation);
+      document.getElementById("multiChatBtn").addEventListener("click", createMultiConversation);
       userInput.addEventListener("keydown", event => {
         if (event.key === "Enter") {
           sendChat();
@@ -755,6 +790,17 @@ const dashboardPage = `
   </body>
   </html>
 `;
+async function chatHandler1(message) {
+  return handleChat(message, { model: "llama3.2" });
+}
+
+async function chatHandler2(message) {
+  return handleChat(message, { model: "mistral" });
+}
+
+async function chatHandler3(message) {
+  return handleChat(message, { model: "gemma3" });
+}
 
 function createRequestListener(chatHandler = handleChat) {
   return async (req, res) => {
@@ -796,6 +842,42 @@ function createRequestListener(chatHandler = handleChat) {
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ reply: err.message }));
+        }
+      });
+    }
+    else if (req.method === 'POST' && req.url === '/api/chat-multi') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+
+      req.on('end', async () => {
+        try {
+          const parsedBody = JSON.parse(body);
+
+          if (!parsedBody.message || !parsedBody.message.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ replies: ["Please enter a message before sending."] }));
+            return;
+          }
+
+          // generate multiple responses
+          const replies = await Promise.all([
+            chatHandler1(parsedBody.message),
+            chatHandler2(parsedBody.message),
+            chatHandler3(parsedBody.message)
+          ]);
+
+          const labeledReplies = [
+            { model: 'llama3.2', text: replies[0] },
+            { model: 'mistral', text: replies[1] },
+            { model: 'gemma', text: replies[2] }
+          ];
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ replies: labeledReplies }));
+
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ replies: [err.message] }));
         }
       });
     }

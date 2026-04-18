@@ -1,4 +1,5 @@
-async function handleChat(userMessage) {
+async function handleChat(userMessage, options = {}) {
+  console.log("Using model:", options.model || 'llama3.2');
   try {
     const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
@@ -6,7 +7,7 @@ async function handleChat(userMessage) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama3.2',
+        model: options.model || 'llama3.2',
         prompt: userMessage,
         stream: false
       })
