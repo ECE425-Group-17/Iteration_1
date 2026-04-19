@@ -1,7 +1,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { handleChat } = require('./chat.js');
+const { handleChat, runModel } = require('./chat.js');
 
 const homePage = `
   <html>
@@ -486,6 +486,26 @@ const dashboardPage = `
         font-size: 14px;
         margin-top: 6px;
       }
+      .chat-row.llama{
+      background: #e0f2fe;
+      color: #075985;
+      }
+      .chat-row.mistral{
+      background: #fef3c7;
+      color: #92400e;
+      }
+
+      .chat-row.gemma{
+      background: #e9d5ff;
+      color: #581c87;
+      }
+
+      .chat-row.system{
+      background: #f3f4f6;
+      color: #374151;
+      font-style: italic;
+      }
+
     </style>
   </head>
   <body>
@@ -521,7 +541,7 @@ const dashboardPage = `
       </div>
     </div>
 
-    <script>
+        <script>
       const userEmail = sessionStorage.getItem("loggedInUserEmail");
 
       if (!userEmail) {
@@ -543,15 +563,11 @@ const dashboardPage = `
 
       function getConversationStore() {
         const saved = localStorage.getItem(conversationStoreKey);
-        if (!saved) {
-          return [];
-        }
-
+        if (!saved) return [];
         try {
           const parsed = JSON.parse(saved);
           return Array.isArray(parsed) ? parsed : [];
         } catch (err) {
-          console.error("Could not parse conversation store:", err);
           return [];
         }
       }
@@ -580,75 +596,51 @@ const dashboardPage = `
 
       function ensureConversationState() {
         const conversations = getConversationStore();
-        const activeId = getActiveConversationId();
+        let activeId = getActiveConversationId();
 
         if (conversations.length === 0) {
-          const starterConversation = createConversation("New Chat");
-          saveConversationStore([starterConversation]);
-          setActiveConversationId(starterConversation.id);
-          return [starterConversation];
+          const starter = createConversation("New Chat");
+          saveConversationStore([starter]);
+          setActiveConversationId(starter.id);
+          return [starter];
         }
 
-        if (!activeId || !conversations.some(conversation => conversation.id === activeId)) {
+        if (!activeId || !conversations.some(c => c.id === activeId)) {
           setActiveConversationId(conversations[0].id);
         }
-
         return conversations;
       }
 
       function getActiveConversation() {
         const conversations = ensureConversationState();
         const activeId = getActiveConversationId();
-        return conversations.find(conversation => conversation.id === activeId) || conversations[0];
+        return conversations.find(c => c.id === activeId) || conversations[0];
       }
 
       function updateConversation(updatedConversation) {
-        const conversations = ensureConversationState().map(conversation =>
-          conversation.id === updatedConversation.id ? updatedConversation : conversation
+        const conversations = getConversationStore().map(c =>
+          c.id === updatedConversation.id ? { ...updatedConversation, updatedAt: Date.now() } : c
         );
         saveConversationStore(conversations);
       }
 
-      function createTitleFromMessage(message) {
-        return message.length > 28 ? message.slice(0, 28) + "..." : message;
-      }
-
-      function renderConversationList() {
-        const conversations = ensureConversationState()
-          .slice()
-          .sort((a, b) => b.updatedAt - a.updatedAt);
-        const activeId = getActiveConversationId();
-
-        conversationList.innerHTML = "";
-
-        conversations.forEach(conversation => {
-          const item = document.createElement("div");
-          item.className = "conversation-item" + (conversation.id === activeId ? " active" : "");
-
-          const previewText = conversation.messages.length > 0
-            ? conversation.messages[conversation.messages.length - 1].text
-            : "No messages yet";
-
-          item.innerHTML =
-            '<div class="conversation-title">' + escapeHtml(conversation.title) + '</div>' +
-            '<div class="conversation-preview">' + escapeHtml(previewText.slice(0, 45)) + '</div>';
-
-          item.addEventListener("click", () => {
-            setActiveConversationId(conversation.id);
-            renderConversationList();
-            renderActiveConversation();
-          });
-
-          conversationList.appendChild(item);
-        });
-      }
-
       function appendMessage(role, text) {
         const row = document.createElement("div");
-        row.className = "chat-row " + role;
-        row.innerHTML = "<b>" + role.toUpperCase() + ":</b> " + escapeHtml(text);
+        const cssClass = role.includes("llama") ? "llama" : role;
+        row.className = "chat-row " + cssClass;
+
+        const labelMap = {
+          user: "USER",
+          llama: "LLAMA3.1",
+          mistral: "MISTRAL",
+          gemma: "GEMMA3",
+          system: "SYSTEM"
+        };
+
+        row.innerHTML = "<b>" + (labelMap[cssClass] || role.toUpperCase()) + ": </b>" + escapeHtml(text);
         chatBox.appendChild(row);
         chatBox.scrollTop = chatBox.scrollHeight;
+        return row;
       }
 
       function renderActiveConversation() {
@@ -657,92 +649,130 @@ const dashboardPage = `
         conversationName.textContent = "Current conversation: " + activeConversation.title;
 
         if (activeConversation.messages.length === 0) {
-          appendMessage("system", "No messages yet. Start a new conversation.");
-          return;
+          appendMessage("system", "No messages yet. Start chatting below!");
+        } else {
+          activeConversation.messages.forEach(m => appendMessage(m.role, m.text));
         }
+      }
 
-        activeConversation.messages.forEach(entry => appendMessage(entry.role, entry.text));
+      function renderConversationList() {
+        const conversations = getConversationStore().sort((a, b) => b.updatedAt - a.updatedAt);
+        const activeId = getActiveConversationId();
+        conversationList.innerHTML = "";
+
+        conversations.forEach(conv => {
+          const item = document.createElement("div");
+          item.className = "conversation-item" + (conv.id === activeId ? " active" : "");
+          const lastMsg = conv.messages.length > 0 ? conv.messages[conv.messages.length - 1].text : "Empty chat";
+          
+          item.innerHTML = \`
+            <div class="conversation-title">\${escapeHtml(conv.title)}</div>
+            <div class="conversation-preview">\${escapeHtml(lastMsg.slice(0, 40))}...</div>
+          \`;
+          item.onclick = () => {
+            setActiveConversationId(conv.id);
+            renderConversationList();
+            renderActiveConversation();
+          };
+          conversationList.appendChild(item);
+        });
       }
 
       function createNewConversation() {
-        const conversations = ensureConversationState();
-        const conversation = createConversation("New Chat");
-        conversations.unshift(conversation);
-        saveConversationStore(conversations);
-        setActiveConversationId(conversation.id);
+        const newConv = createConversation("New Chat");
+        const store = getConversationStore();
+        store.push(newConv);
+        saveConversationStore(store);
+        setActiveConversationId(newConv.id);
         renderConversationList();
         renderActiveConversation();
-        userInput.focus();
       }
 
-      async function sendChat() {
-        const message = userInput.value.trim();
-        if (!message) {
-          return;
-        }
+async function sendChat() {
+        const inputMessage = userInput.value.trim();
+        if (!inputMessage) return;
 
-        const activeConversation = getActiveConversation();
-        activeConversation.messages.push({ role: "user", text: message });
-        activeConversation.updatedAt = Date.now();
-        if (activeConversation.messages.length === 1) {
-          activeConversation.title = createTitleFromMessage(message);
-        }
-        updateConversation(activeConversation);
-        renderConversationList();
-        renderActiveConversation();
+        appendMessage("user", inputMessage);
         userInput.value = "";
+
+        const activeConv = getActiveConversation();
+        activeConv.messages.push({ role: "user", text: inputMessage });
+        
+        if (activeConv.messages.length === 1 || activeConv.title === "New Chat") {
+            activeConv.title = inputMessage.length > 25 ? inputMessage.slice(0, 25) + "..." : inputMessage;
+        }
+        updateConversation(activeConv);
+        renderConversationList();
 
         try {
           const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message: inputMessage })
           });
 
-          const data = await response.json();
-          const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "ai", text: data.reply });
-          updatedConversation.updatedAt = Date.now();
-          updateConversation(updatedConversation);
-          renderConversationList();
-          renderActiveConversation();
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let statusIndicator = null;
+          let buffer = ""; 
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, {stream: true});
+            const lines = buffer.split("\\n");
+            buffer = lines.pop(); // FIXED: Added parentheses
+
+            for (const line of lines) {
+                  if (!line.startsWith("data:")) continue;
+                  
+                  let data;
+                  try {
+                    data = JSON.parse(line.replace("data:", "").trim());
+                  } catch (e) {
+                    console.error("JSON parse error", e);
+                    continue; 
+                  }
+
+                  if (data.type === "status") {
+                    if (statusIndicator) statusIndicator.remove();
+                    // FIXED: Corrected string concatenation syntax
+                    statusIndicator = appendMessage("system", "(" + data.model + ") is thinking...");
+                  }
+
+                  if (data.type === "response") {
+                    if (statusIndicator) {
+                      statusIndicator.remove();
+                      statusIndicator = null;
+                    }
+                appendMessage(data.model, data.text);
+                
+                const currentConv = getActiveConversation();
+                currentConv.messages.push({ role: data.model, text: data.text });
+                updateConversation(currentConv);
+              }
+            }
+          }
         } catch (err) {
-          const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "system", text: "Error connecting to the app server." });
-          updatedConversation.updatedAt = Date.now();
-          updateConversation(updatedConversation);
-          renderConversationList();
-          renderActiveConversation();
+          appendMessage("system", "Error: " + err.message);
         }
       }
 
+      
       document.getElementById("sendBtn").addEventListener("click", sendChat);
       document.getElementById("newChatBtn").addEventListener("click", createNewConversation);
-      userInput.addEventListener("keydown", event => {
-        if (event.key === "Enter") {
-          sendChat();
-        }
-      });
-
       document.getElementById("clearBtn").addEventListener("click", () => {
-        const activeConversationId = getActiveConversationId();
-        const remainingConversations = ensureConversationState().filter(
-          conversation => conversation.id !== activeConversationId
-        );
-
-        if (remainingConversations.length === 0) {
-          const replacementConversation = createConversation("New Chat");
-          saveConversationStore([replacementConversation]);
-          setActiveConversationId(replacementConversation.id);
-        } else {
-          saveConversationStore(remainingConversations);
-          setActiveConversationId(remainingConversations[0].id);
-        }
-
+        const activeId = getActiveConversationId();
+        const remaining = getConversationStore().filter(c => c.id !== activeId);
+        saveConversationStore(remaining);
+        localStorage.removeItem(activeConversationKey);
+        ensureConversationState();
         renderConversationList();
         renderActiveConversation();
       });
 
+      userInput.addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
       document.getElementById("logoutBtn").addEventListener("click", () => {
         sessionStorage.removeItem("loggedInUserEmail");
         window.location.href = "/";
@@ -779,24 +809,42 @@ function createRequestListener(chatHandler = handleChat) {
       res.end(dashboardPage);
     }
     else if (req.method === 'POST' && req.url === '/api/chat') {
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', async () => {
-        try {
-          const parsedBody = JSON.parse(body);
-          if (!parsedBody.message || !parsedBody.message.trim()) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
-            return;
-          }
 
-          const aiReply = await chatHandler(parsedBody.message);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ reply: aiReply }));
+      let body = '';
+
+      req.on('data', chunk => body += chunk);
+
+      req.on('end', async () => {
+
+        const { message } = JSON.parse(body);
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive"
+        });
+
+        try {
+
+          res.write(`data: ${JSON.stringify({ type: "status", model: "llama" })}\n\n`);
+          const r1 = await runModel("llama3.1", message);
+          res.write(`data: ${JSON.stringify({ type: "response", model: "llama", text: r1 })}\n\n`);
+
+          res.write(`data: ${JSON.stringify({ type: "status", model: "mistral" })}\n\n`);
+          const r2 = await runModel("mistral", message);
+          res.write(`data: ${JSON.stringify({ type: "response", model: "mistral", text: r2 })}\n\n`);
+
+          res.write(`data: ${JSON.stringify({ type: "status", model: "gemma" })}\n\n`);
+          const r3 = await runModel("gemma3", message);
+          res.write(`data: ${JSON.stringify({ type: "response", model: "gemma", text: r3 })}\n\n`);
+
+          res.end();
+
         } catch (err) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ reply: err.message }));
+          res.write(`data: ${JSON.stringify({ type: "error", message: err.message })}\n\n`);
+          res.end();
         }
+
       });
     }
     else if (req.method === 'GET' && req.url === '/firebase.js') {
