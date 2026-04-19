@@ -1,28 +1,24 @@
-async function handleChat(userMessage) {
-  try {
-    const response = await fetch('http://127.0.0.1:11434/api/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama3.2',
-        prompt: userMessage,
-        stream: false
-      })
-    });
+async function runModel(modelName, prompt) {
+  const response = await fetch('http://127.0.0.1:11434/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: modelName,
+      prompt,
+      stream: false
+    })
+  });
 
-    if (!response.ok) {
-      throw new Error(`Ollama error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.response;
-  } catch (err) {
-    console.error('Error');
-    console.error(err.message);
-    throw new Error(`Unable to reach Ollama at http://127.0.0.1:11434. ${err.message}`);
-  }
+  const data = await response.json();
+  return data.response;
 }
 
-module.exports = { handleChat };
+async function handleChat(userMessage) {
+  const llama = await runModel("llama3.1", userMessage);
+  const mistral = await runModel("mistral", userMessage);
+  const gemma = await runModel("gemma3", userMessage);
+
+  return { llama, mistral, gemma };
+}
+
+module.exports = { handleChat, runModel };
