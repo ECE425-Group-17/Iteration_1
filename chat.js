@@ -1,12 +1,15 @@
-async function handleChat(userMessage) {
+const OLLAMA_URL = 'http://127.0.0.1:11434/api/generate';
+const DEFAULT_MODELS = ['llama3:8b', 'gemma4:e4b', 'phi3'];
+
+async function fetchModelResponse(userMessage, model) {
   try {
-    const response = await fetch('http://127.0.0.1:11434/api/generate', {
+    const response = await fetch(OLLAMA_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama3.2',
+        model,
         prompt: userMessage,
         stream: false
       })
@@ -17,7 +20,10 @@ async function handleChat(userMessage) {
     }
 
     const data = await response.json();
-    return data.response;
+    return {
+      model,
+      reply: data.response
+    };
   } catch (err) {
     console.error('Error');
     console.error(err.message);
@@ -25,4 +31,16 @@ async function handleChat(userMessage) {
   }
 }
 
-module.exports = { handleChat };
+async function handleChat(userMessage) {
+  return Promise.all(DEFAULT_MODELS.map(model => fetchModelResponse(userMessage, model)));
+}
+
+async function regenerateChat(userMessage, model) {
+  return fetchModelResponse(userMessage, model);
+}
+
+module.exports = {
+  DEFAULT_MODELS,
+  handleChat,
+  regenerateChat
+};

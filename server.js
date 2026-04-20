@@ -1,7 +1,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { handleChat } = require('./chat.js');
+const { handleChat, regenerateChat } = require('./chat.js');
 
 const homePage = `
   <html>
@@ -349,6 +349,9 @@ const dashboardPage = `
   <head>
     <title>Dashboard</title>
     <style>
+      :root {
+        --chat-font-size: 16px;
+      }
       body {
         font-family: Arial, sans-serif;
         margin: 0;
@@ -426,21 +429,153 @@ const dashboardPage = `
       .top-bar {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         gap: 16px;
       }
       .top-bar h1 {
         margin-bottom: 8px;
       }
-      #chat-box {
+      .toolbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .font-size-control {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 14px;
+        color: #374151;
+      }
+      .status-banner {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #e5eefb;
+        color: #1e3a5f;
+        font-size: 14px;
+      }
+      #compare-view {
         border: 1px solid #ccc;
-        flex: 1;
         min-height: 320px;
-        overflow-y: auto;
+        height: 520px;
         margin: 20px 0 12px;
-        padding: 12px;
+        padding: 16px;
         background: #fafafa;
         border-radius: 10px;
+        overflow-y: auto;
+      }
+      .compare-history {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .compare-set {
+        border: 1px solid #d6dbe3;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 14px;
+      }
+      .prompt-panel {
+        background: #dbeafe;
+        border: 1px solid #93c5fd;
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
+        font-size: var(--chat-font-size);
+      }
+      .prompt-label,
+      .response-label {
+        font-size: 12px;
+        font-weight: bold;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #475569;
+        margin-bottom: 6px;
+      }
+      .prompt-text {
+        margin: 0;
+        color: #0f172a;
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
+      .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+      .compare-card {
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-size: var(--chat-font-size);
+      }
+      .compare-card.model-llama {
+        background: #fff4db;
+        border-color: #f5c96b;
+      }
+      .compare-card.model-gemma {
+        background: #eaf7ee;
+        border-color: #86d19d;
+      }
+      .compare-card.model-phi {
+        background: #ffe7f3;
+        border-color: #f58bb8;
+      }
+      .compare-card h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .compare-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .card-status {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .compare-card p {
+        margin: 0;
+        color: #1f2937;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        min-height: 72px;
+      }
+      .compare-card button {
+        align-self: flex-start;
+        width: auto;
+        padding: 8px 12px;
+        margin-top: auto;
+      }
+      .compare-card button[disabled],
+      .composer button[disabled] {
+        cursor: wait;
+        opacity: 0.7;
+      }
+      .loading-text {
+        color: #2563eb;
+        font-style: italic;
+      }
+      .compare-empty {
+        color: #6b7280;
+        font-size: 14px;
+      }
+      .history-label {
+        font-size: 12px;
+        font-weight: bold;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: 10px;
       }
       .chat-row {
         margin-bottom: 10px;
@@ -486,6 +621,16 @@ const dashboardPage = `
         font-size: 14px;
         margin-top: 6px;
       }
+      @media (max-width: 980px) {
+        .container {
+          margin: 0;
+          border-radius: 0;
+          min-height: 100vh;
+        }
+        #compare-view {
+          height: 60vh;
+        }
+      }
     </style>
   </head>
   <body>
@@ -507,12 +652,23 @@ const dashboardPage = `
             <h1>Welcome to your dashboard</h1>
             <p class="helper-text">Your chats are organized by conversation for this signed-in user.</p>
             <div id="conversation-name"></div>
+            <div id="statusBanner" class="status-banner">Ready for your next prompt.</div>
+            <div class="toolbar">
+              <div class="font-size-control">
+                <label for="fontSizeSelect">Font Size</label>
+                <select id="fontSizeSelect">
+                  <option value="14">Small</option>
+                  <option value="16" selected>Medium</option>
+                  <option value="20">Large</option>
+                </select>
+              </div>
+            </div>
           </div>
           <button id="clearBtn">Delete Current Chat</button>
         </div>
 
-        <h2>Chat with Ollama</h2>
-        <div id="chat-box"></div>
+        <h2>Chat with 3 LLMs</h2>
+        <div id="compare-view"></div>
 
         <div class="composer">
           <input type="text" id="userInput" placeholder="Type a message...">
@@ -528,12 +684,21 @@ const dashboardPage = `
         window.location.href = "/";
       }
 
-      const chatBox = document.getElementById("chat-box");
       const userInput = document.getElementById("userInput");
+      const sendBtn = document.getElementById("sendBtn");
       const conversationList = document.getElementById("conversation-list");
       const conversationName = document.getElementById("conversation-name");
+      const compareView = document.getElementById("compare-view");
+      const fontSizeSelect = document.getElementById("fontSizeSelect");
+      const statusBanner = document.getElementById("statusBanner");
       const conversationStoreKey = "chatConversations:" + userEmail;
       const activeConversationKey = "activeConversation:" + userEmail;
+      const fontSizeKey = "chatFontSize:" + userEmail;
+      const mockChatEnabled = sessionStorage.getItem("mockChat") === "true";
+      const modelNames = ["llama3:8b", "gemma4:e4b", "phi3"];
+      let currentRequestId = 0;
+      let pendingCompareSet = null;
+      let regeneratingKeys = [];
 
       function escapeHtml(text) {
         const div = document.createElement("div");
@@ -549,7 +714,7 @@ const dashboardPage = `
 
         try {
           const parsed = JSON.parse(saved);
-          return Array.isArray(parsed) ? parsed : [];
+          return Array.isArray(parsed) ? parsed.map(normalizeConversation) : [];
         } catch (err) {
           console.error("Could not parse conversation store:", err);
           return [];
@@ -566,7 +731,19 @@ const dashboardPage = `
           title: title || "New Chat",
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          messages: []
+          messages: [],
+          compareSets: []
+        };
+      }
+
+      function normalizeConversation(conversation) {
+        return {
+          id: conversation && conversation.id ? conversation.id : "conversation-" + Date.now(),
+          title: conversation && conversation.title ? conversation.title : "New Chat",
+          createdAt: conversation && conversation.createdAt ? conversation.createdAt : Date.now(),
+          updatedAt: conversation && conversation.updatedAt ? conversation.updatedAt : Date.now(),
+          messages: conversation && Array.isArray(conversation.messages) ? conversation.messages : [],
+          compareSets: conversation && Array.isArray(conversation.compareSets) ? conversation.compareSets : []
         };
       }
 
@@ -593,6 +770,8 @@ const dashboardPage = `
           setActiveConversationId(conversations[0].id);
         }
 
+        saveConversationStore(conversations);
+
         return conversations;
       }
 
@@ -607,6 +786,33 @@ const dashboardPage = `
           conversation.id === updatedConversation.id ? updatedConversation : conversation
         );
         saveConversationStore(conversations);
+      }
+
+      function setStatus(message) {
+        statusBanner.textContent = message;
+      }
+
+      function getModelCardClass(model) {
+        if (model.indexOf("llama") !== -1) {
+          return "model-llama";
+        }
+        if (model.indexOf("gemma") !== -1) {
+          return "model-gemma";
+        }
+        if (model.indexOf("phi") !== -1) {
+          return "model-phi";
+        }
+        return "";
+      }
+
+      function getRegeneratingKey(compareSetIndex, model) {
+        return compareSetIndex + ":" + model;
+      }
+
+      function applyFontSize(size) {
+        document.documentElement.style.setProperty("--chat-font-size", size + "px");
+        fontSizeSelect.value = size;
+        localStorage.setItem(fontSizeKey, size);
       }
 
       function createTitleFromMessage(message) {
@@ -643,25 +849,75 @@ const dashboardPage = `
         });
       }
 
-      function appendMessage(role, text) {
-        const row = document.createElement("div");
-        row.className = "chat-row " + role;
-        row.innerHTML = "<b>" + role.toUpperCase() + ":</b> " + escapeHtml(text);
-        chatBox.appendChild(row);
-        chatBox.scrollTop = chatBox.scrollHeight;
+      function appendCompareCard(reply, compareSetIndex, gridElement) {
+        const card = document.createElement("div");
+        card.className = "compare-card " + getModelCardClass(reply.model);
+        const isLoading = reply.state === "loading";
+        const isRegenerating = regeneratingKeys.includes(getRegeneratingKey(compareSetIndex, reply.model));
+        const buttonText = isRegenerating ? "Regenerating..." : "Regenerate";
+        const statusText = isLoading ? "Generating..." : isRegenerating ? "Updating..." : "Ready";
+        card.innerHTML =
+          "<div class='compare-card-header'>" +
+            "<h3>" + escapeHtml(reply.model) + "</h3>" +
+            "<span class='card-status'>" + escapeHtml(statusText) + "</span>" +
+          "</div>" +
+          "<div class='response-label'>Response</div>" +
+          "<p class='" + (isLoading ? "loading-text" : "") + "'>" + escapeHtml(reply.reply) + "</p>" +
+          "<button class='regenerate-btn' data-model='" + escapeHtml(reply.model) + "' data-compare-index='" + escapeHtml(String(compareSetIndex)) + "'" + (isLoading || isRegenerating ? " disabled" : "") + ">" + escapeHtml(buttonText) + "</button>";
+        gridElement.appendChild(card);
       }
 
-      function renderActiveConversation() {
-        const activeConversation = getActiveConversation();
-        chatBox.innerHTML = "";
-        conversationName.textContent = "Current conversation: " + activeConversation.title;
+      function renderCompareSet(compareSet, compareSetIndex, parentElement) {
+        const setElement = document.createElement("div");
+        setElement.className = "compare-set";
+        setElement.innerHTML =
+          "<div class='prompt-panel'>" +
+            "<div class='prompt-label'>Your Prompt</div>" +
+            "<p class='prompt-text'>" + escapeHtml(compareSet.prompt) + "</p>" +
+          "</div>" +
+          "<div class='compare-grid'></div>";
 
-        if (activeConversation.messages.length === 0) {
-          appendMessage("system", "No messages yet. Start a new conversation.");
+        const gridElement = setElement.querySelector(".compare-grid");
+        compareSet.replies.forEach(reply => appendCompareCard(reply, compareSetIndex, gridElement));
+        parentElement.appendChild(setElement);
+      }
+
+      function renderCompareView(activeConversation, options = {}) {
+        const shouldScrollToBottom = Boolean(options.scrollToBottom);
+        compareView.innerHTML = "";
+
+        const compareSets = activeConversation.compareSets ? activeConversation.compareSets.slice() : [];
+        if (pendingCompareSet) {
+          compareSets.push(pendingCompareSet);
+        }
+
+        if (compareSets.length === 0) {
+          compareView.innerHTML = "<div class='compare-empty'>Compare 3 LLMs by sending a new prompt first.</div>";
           return;
         }
 
-        activeConversation.messages.forEach(entry => appendMessage(entry.role, entry.text));
+        compareView.innerHTML = "<div class='history-label'>Conversation History</div><div class='compare-history'></div>";
+        const historyElement = compareView.querySelector(".compare-history");
+
+        compareSets.forEach((compareSet, compareSetIndex) => {
+          renderCompareSet(compareSet, compareSetIndex, historyElement);
+        });
+
+        compareView.querySelectorAll(".regenerate-btn").forEach(button => {
+          button.addEventListener("click", async () => {
+            await regenerateOneResponse(button.dataset.model, Number(button.dataset.compareIndex));
+          });
+        });
+
+        if (shouldScrollToBottom) {
+          compareView.scrollTop = compareView.scrollHeight;
+        }
+      }
+
+      function renderActiveConversation(options = {}) {
+        const activeConversation = getActiveConversation();
+        conversationName.textContent = "Current conversation: " + activeConversation.title;
+        renderCompareView(activeConversation, options);
       }
 
       function createNewConversation() {
@@ -671,8 +927,53 @@ const dashboardPage = `
         saveConversationStore(conversations);
         setActiveConversationId(conversation.id);
         renderConversationList();
-        renderActiveConversation();
+        renderActiveConversation({ scrollToBottom: true });
         userInput.focus();
+      }
+
+      function buildMockReplies(message) {
+        return modelNames.map(model => ({
+          model: model,
+          reply: "Mock " + model + " reply for: " + message
+        }));
+      }
+
+      async function fetchCompareResponses(message) {
+        if (mockChatEnabled) {
+          return buildMockReplies(message);
+        }
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.reply || "Error connecting to the app server.");
+        }
+
+        return data.replies;
+      }
+
+      async function fetchRegeneratedResponse(message, model) {
+        if (mockChatEnabled) {
+          return { model, reply: "Mock regenerated reply from " + model + " for: " + message };
+        }
+
+        const response = await fetch("/api/chat/regenerate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, model })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.reply || "Error connecting to the app server.");
+        }
+
+        return data.reply;
       }
 
       async function sendChat() {
@@ -680,6 +981,21 @@ const dashboardPage = `
         if (!message) {
           return;
         }
+
+        const requestId = Date.now();
+        currentRequestId = requestId;
+        pendingCompareSet = {
+          prompt: message,
+          replies: modelNames.map(model => ({
+            model: model,
+            reply: "Generating response...",
+            state: "loading"
+          }))
+        };
+        regeneratingKeys = [];
+        sendBtn.disabled = true;
+        sendBtn.textContent = "Generating...";
+        setStatus("Generating 3 responses...");
 
         const activeConversation = getActiveConversation();
         activeConversation.messages.push({ role: "user", text: message });
@@ -689,35 +1005,100 @@ const dashboardPage = `
         }
         updateConversation(activeConversation);
         renderConversationList();
-        renderActiveConversation();
+        renderActiveConversation({ scrollToBottom: true });
         userInput.value = "";
 
         try {
-          const response = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message })
-          });
-
-          const data = await response.json();
           const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "ai", text: data.reply });
+          const replies = await fetchCompareResponses(message);
+          if (currentRequestId !== requestId) {
+            return;
+          }
+          replies.forEach(entry => {
+            updatedConversation.messages.push({
+              role: "ai",
+              model: entry.model,
+              text: "[" + entry.model + "] " + entry.reply
+            });
+          });
+          updatedConversation.compareSets.push({
+            prompt: message,
+            replies: replies
+          });
           updatedConversation.updatedAt = Date.now();
           updateConversation(updatedConversation);
+          pendingCompareSet = null;
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send";
+          setStatus("Finished generating all 3 responses.");
           renderConversationList();
-          renderActiveConversation();
+          renderActiveConversation({ scrollToBottom: true });
         } catch (err) {
           const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "system", text: "Error connecting to the app server." });
+          updatedConversation.messages.push({ role: "system", text: err.message || "Error connecting to the app server." });
           updatedConversation.updatedAt = Date.now();
           updateConversation(updatedConversation);
+          pendingCompareSet = null;
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send";
+          setStatus("Generation failed. Please try again.");
           renderConversationList();
-          renderActiveConversation();
+          renderActiveConversation({ scrollToBottom: true });
         }
       }
 
-      document.getElementById("sendBtn").addEventListener("click", sendChat);
+      async function regenerateOneResponse(model, compareSetIndex) {
+        const activeConversation = getActiveConversation();
+        const targetCompareSet = activeConversation.compareSets[compareSetIndex];
+
+        if (!targetCompareSet) {
+          return;
+        }
+
+        try {
+          const previousScrollTop = compareView.scrollTop;
+          const regeneratingKey = getRegeneratingKey(compareSetIndex, model);
+          regeneratingKeys = regeneratingKeys.concat(regeneratingKey);
+          setStatus("Regenerating " + model + " for the selected prompt...");
+          renderActiveConversation();
+          compareView.scrollTop = previousScrollTop;
+          const regeneratedReply = await fetchRegeneratedResponse(targetCompareSet.prompt, model);
+          targetCompareSet.replies = targetCompareSet.replies.map(entry =>
+            entry.model === model ? regeneratedReply : entry
+          );
+          activeConversation.messages.push({
+            role: "ai",
+            model: regeneratedReply.model,
+            text: "[" + regeneratedReply.model + "] " + regeneratedReply.reply
+          });
+          activeConversation.updatedAt = Date.now();
+          updateConversation(activeConversation);
+          regeneratingKeys = regeneratingKeys.filter(entry => entry !== regeneratingKey);
+          setStatus(model + " finished regenerating for that prompt.");
+          renderConversationList();
+          renderActiveConversation();
+          compareView.scrollTop = previousScrollTop;
+        } catch (err) {
+          const previousScrollTop = compareView.scrollTop;
+          activeConversation.messages.push({
+            role: "system",
+            text: err.message || "Error connecting to the app server."
+          });
+          activeConversation.updatedAt = Date.now();
+          updateConversation(activeConversation);
+          regeneratingKeys = regeneratingKeys.filter(entry => entry !== getRegeneratingKey(compareSetIndex, model));
+          setStatus("Regeneration failed for " + model + ".");
+          renderConversationList();
+          renderActiveConversation();
+          compareView.scrollTop = previousScrollTop;
+        }
+      }
+
+      sendBtn.addEventListener("click", sendChat);
       document.getElementById("newChatBtn").addEventListener("click", createNewConversation);
+      fontSizeSelect.addEventListener("change", event => {
+        applyFontSize(event.target.value);
+      });
       userInput.addEventListener("keydown", event => {
         if (event.key === "Enter") {
           sendChat();
@@ -748,15 +1129,16 @@ const dashboardPage = `
         window.location.href = "/";
       });
 
+      applyFontSize(localStorage.getItem(fontSizeKey) || "16");
       ensureConversationState();
       renderConversationList();
-      renderActiveConversation();
+      renderActiveConversation({ scrollToBottom: true });
     </script>
   </body>
   </html>
 `;
 
-function createRequestListener(chatHandler = handleChat) {
+function createRequestListener(chatHandler = handleChat, regenerateHandler = regenerateChat) {
   return async (req, res) => {
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -791,6 +1173,33 @@ function createRequestListener(chatHandler = handleChat) {
           }
 
           const aiReply = await chatHandler(parsedBody.message);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ replies: aiReply }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ reply: err.message }));
+        }
+      });
+    }
+    else if (req.method === 'POST' && req.url === '/api/chat/regenerate') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          const parsedBody = JSON.parse(body);
+          if (!parsedBody.message || !parsedBody.message.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
+            return;
+          }
+
+          if (!parsedBody.model || !parsedBody.model.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ reply: "Please choose which LLM response to regenerate." }));
+            return;
+          }
+
+          const aiReply = await regenerateHandler(parsedBody.message, parsedBody.model);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ reply: aiReply }));
         } catch (err) {
