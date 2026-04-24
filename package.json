@@ -4,8 +4,9 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "test": "jasmine",
-    "start": "node server.js"
+  "start": "node server.js",
+  "test": "jasmine",
+  "test:acceptance": "cucumber-js"
   },
   "repository": {
     "type": "git",

@@ -1,48 +1,59 @@
-const { handleChat } = require('../chat.js');
+const {
+  MODELS,
+  generateWithModel,
+  handleMultiChat,
+  regenerateResponse
+} = require("../chat.js");
 
-describe("Ollama Chat Logic", () => {
+describe("Multi-LLM Chat Logic", () => {
   beforeEach(() => {
-    spyOn(console, 'error');
-    global.fetch = jasmine.createSpy("fetch").and.callFake(() => {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ response: "Mock AI Response" })
-      });
+    global.fetch = jasmine.createSpy("fetch").and.resolveTo({
+      ok: true,
+      json: () => Promise.resolve({ response: "Mock AI Response" })
     });
   });
 
-  it("should return a response string when Ollama succeeds", async () => {
-    const result = await handleChat("Hello");
-    expect(result).toBe("Mock AI Response");
-    expect(global.fetch).toHaveBeenCalled();
+  it("contains three models", () => {
+    expect(MODELS.length).toBe(3);
   });
 
-  it("should send the expected payload to Ollama", async () => {
-    await handleChat("Hello");
+  it("sends the selected model to Ollama", async () => {
+    const testModel = MODELS[0];
+
+    await generateWithModel(testModel, "Hello");
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:11434/api/generate',
+      "http://127.0.0.1:11434/api/generate",
       jasmine.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: 'gemma4:e4b',
-          prompt: 'Hello',
+          model: testModel,
+          prompt: "Hello",
           stream: false
         })
       })
     );
   });
 
-  it("should throw a helpful error when Ollama responds with a bad status", async () => {
-    global.fetch.and.resolveTo({
-      ok: false,
-      status: 503,
-      statusText: 'Service Unavailable'
-    });
+  it("returns responses for all three models", async () => {
+    const result = await handleMultiChat("Hello");
 
-    await expectAsync(handleChat("Hello")).toBeRejectedWithError(
-      'Unable to reach Ollama at http://127.0.0.1:11434. Ollama error: 503 Service Unavailable'
-    );
+    expect(Object.keys(result).length).toBe(3);
+
+    MODELS.forEach(model => {
+      expect(result[model]).toBe("Mock AI Response");
+    });
+  });
+
+  it("regenerates a response for a valid model", async () => {
+    const result = await regenerateResponse(MODELS[0], "Hello");
+    expect(result).toBe("Mock AI Response");
+  });
+
+  it("rejects an invalid model", async () => {
+    await expectAsync(
+      regenerateResponse("fakeModel", "Hello")
+    ).toBeRejectedWithError("Invalid model selected.");
   });
 });
