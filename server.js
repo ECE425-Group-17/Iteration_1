@@ -1,7 +1,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { handleChat } = require('./chat.js');
+const { handleChat, handleMultiChat } = require('./chat.js');
 
 const homePage = `
   <html>
@@ -701,7 +701,10 @@ const dashboardPage = `
 
           const data = await response.json();
           const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "ai", text: data.reply });
+          const combined = data.responses
+  .map(r => r.model + ": " + r.answer)
+  .join("\\n\\n");
+          updatedConversation.messages.push({ role: "ai", text: combined });
           updatedConversation.updatedAt = Date.now();
           updateConversation(updatedConversation);
           renderConversationList();
@@ -778,27 +781,30 @@ function createRequestListener(chatHandler = handleChat) {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(dashboardPage);
     }
-    else if (req.method === 'POST' && req.url === '/api/chat') {
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', async () => {
-        try {
-          const parsedBody = JSON.parse(body);
-          if (!parsedBody.message || !parsedBody.message.trim()) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
-            return;
-          }
+  else if (req.method === 'POST' && req.url === '/api/chat') {
+  let body = '';
+  req.on('data', chunk => { body += chunk.toString(); });
+  req.on('end', async () => {
+    try {
+      const parsedBody = JSON.parse(body);
 
-          const aiReply = await chatHandler(parsedBody.message);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ reply: aiReply }));
-        } catch (err) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ reply: err.message }));
-        }
-      });
+      if (!parsedBody.message || !parsedBody.message.trim()) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reply: "Please enter a message before sending." }));
+        return;
+      }
+
+      const responses = await handleMultiChat(parsedBody.message);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ responses }));
+
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ reply: err.message }));
     }
+  });
+}
     else if (req.method === 'GET' && req.url === '/firebase.js') {
       const firebaseFile = path.join(__dirname, 'firebase.js');
 
