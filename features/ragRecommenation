@@ -1,0 +1,23 @@
+Feature: Destination recommendation using RAG and reviews
+    As a user
+    I want the system to analyze reviews and recommend desintations
+    So that I can quickly find highly rated places
+
+    Scenario: Requesting a destination recommendation
+        Given I am logged into the dashboard
+        When I ask "Recommend a good pizza place near me"
+        Then the system should retrieve reviews from the review database
+        And the system should recommend a location based on review sentiment
+        And the response should include a Google Maps link to the location
+
+    Scenario: Viewing the recommended location on Google Maps
+        Given I am logged into the dashboard
+        And the system has recommeneded a destination
+        When I clock the Google Maps link
+        Then the location should open in Google Maps
+
+    Scenario: Filtering recommenations by category
+        Given I am logged into the dashboard
+        When I ask "Recommend a highly rated cafe"
+        Then the system should analyze cafe reviews
+        And the response should include a recommended cafe
