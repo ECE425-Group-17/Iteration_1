@@ -444,10 +444,11 @@ const dashboardPage = `
       }
       .chat-row {
         margin-bottom: 10px;
-        line-height: 1.4;
-        padding: 10px 12px;
+        line-height: 1.5;
+        padding: 12px 14px;
         border-radius: 10px;
         max-width: 85%;
+        white-space: pre-wrap;
       }
       .chat-row.user {
         color: #1f4d8f;
@@ -514,6 +515,17 @@ const dashboardPage = `
         <h2>Chat with Ollama</h2>
         <div id="chat-box"></div>
 
+        <div style="margin-bottom:10px;">
+          <label>Select Model:</label>
+          <select id="modelSelect">
+            <option value="llama3.2">llama3.2</option>
+            <option value="mistral">mistral</option>
+            <option value="gemma">gemma</option>
+            <option value="gpt">GPT</option>
+            <option value="gemini">Gemini</option>
+            <option value="claude">Claude</option>
+          </select>
+        </div>
         <div class="composer">
           <input type="text" id="userInput" placeholder="Type a message...">
           <button id="sendBtn">Send</button>
@@ -693,15 +705,24 @@ const dashboardPage = `
         userInput.value = "";
 
         try {
+          const selectedModel = document.getElementById("modelSelect").value;
           const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message })
+            
+            body: JSON.stringify({ message, selectedModels: [selectedModel]})
           });
 
           const data = await response.json();
           const updatedConversation = getActiveConversation();
-          updatedConversation.messages.push({ role: "ai", text: data.reply });
+          const replyText = typeof data.reply === "object"
+            ? Object.entries(data.reply)
+              .map(function(pair) {
+              return "Model: " + pair[0] + "\\n\\n" + pair[1];
+              })
+              .join("\\n\\n----------------------\\n\\n")
+            : data.reply;
+          updatedConversation.messages.push({ role: "ai", text: replyText });
           updatedConversation.updatedAt = Date.now();
           updateConversation(updatedConversation);
           renderConversationList();
@@ -790,7 +811,7 @@ function createRequestListener(chatHandler = handleChat) {
             return;
           }
 
-          const aiReply = await chatHandler(parsedBody.message);
+          const aiReply = await chatHandler(parsedBody.message, parsedBody.selectedModels || null);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ reply: aiReply }));
         } catch (err) {
