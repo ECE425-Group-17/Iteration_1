@@ -66,7 +66,22 @@ describe("Server API Route", () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toEqual({ reply: 'Mock AI reply' });
-    expect(chatHandler).toHaveBeenCalledWith('Hello there');
+    expect(chatHandler).toHaveBeenCalledWith('Hello there', null);
+  });
+
+  it("passes selected models to the chat handler", async () => {
+    const response = await invokeRoute(listener, {
+      method: 'POST',
+      url: '/api/chat',
+      body: {
+        message: 'Hello there',
+        selectedModels: ['gpt']
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ reply: 'Mock AI reply' });
+    expect(chatHandler).toHaveBeenCalledWith('Hello there', ['gpt']);
   });
 
   it("returns 500 when the chat handler fails", async () => {
