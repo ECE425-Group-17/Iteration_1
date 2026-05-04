@@ -4,15 +4,23 @@ const OpenAI = require('openai');
 const { GoogleGenAI } = require('@google/genai');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const OLLAMA_URL = 'http://127.0.0.1:11434';
-
 function hasKey(key) {
   return typeof key === 'string' && key.trim().length > 0;
 }
+
+const openai = hasKey(process.env.OPENAI_API_KEY)
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const gemini = hasKey(process.env.GEMINI_API_KEY)
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+  : null;
+
+const anthropic = hasKey(process.env.ANTHROPIC_API_KEY)
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
+
+const OLLAMA_URL = 'http://127.0.0.1:11434';
 
 const FALLBACK_RESPONSE = "LLM not present right now\n(Get me an API key you dolt)";
 
