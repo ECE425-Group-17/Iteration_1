@@ -21,4 +21,5 @@ jobs:
         run: npm install
 
       - name: Run basic check
-        run: node server.js
+        run: CI=true node server.js
+

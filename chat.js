@@ -22,7 +22,7 @@ const anthropic = hasKey(process.env.ANTHROPIC_API_KEY)
 
 const OLLAMA_URL = 'http://127.0.0.1:11434';
 
-const FALLBACK_RESPONSE = "LLM not present right now\n(Get me an API key you dolt)";
+const FALLBACK_RESPONSE = "LLM not present right now (Get me an API key you dolt)";
 
 async function determineLocationIntent(message) {
   if (!hasKey(process.env.GEMINI_API_KEY)) {

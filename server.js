@@ -845,7 +845,7 @@ function createServer(chatHandler = handleChat) {
   return http.createServer(createRequestListener(chatHandler));
 }
 
-if (require.main === module) {
+if (require.main === module && process.env.CI !== "true") {
   const server = createServer();
   server.listen(3000, () => {
     console.log('Server running on http://localhost:3000');
