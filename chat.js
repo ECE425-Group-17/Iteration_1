@@ -10,7 +10,17 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const OLLAMA_URL = 'http://127.0.0.1:11434';
 
+function hasKey(key) {
+  return typeof key === 'string' && key.trim().length > 0;
+}
+
+const FALLBACK_RESPONSE = "LLM not present right now\n(Get me an API key you dolt)";
+
 async function determineLocationIntent(message) {
+  if (!hasKey(process.env.GEMINI_API_KEY)) {
+    return { needsSearch: false, searchQuery: null, isFictional: false };
+  }
+
   const prompt = `Analyze the following message to determine if it is asking for travel recommendations, an itinerary, or information about a specific real-world location.
 Fictional locations (e.g., Hogwarts, Gotham, Tatooine, Wakanda) or general chat (e.g., "Hi", "Thanks", "How are you?") MUST return false for needsSearch. 
 
@@ -44,6 +54,10 @@ try {
 }
 
 async function searchGooglePlaces(userMessage) {
+    if (!hasKey(process.env.GOOGLE_MAPS_API_KEY)) {
+    return [];
+  }
+  
   const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: {
@@ -65,50 +79,79 @@ async function searchGooglePlaces(userMessage) {
 }
 
 async function callOllama(model, prompt) {
-  const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: model,
-      prompt: prompt,
-      stream: false
-    })
-  });
+  try{
+    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model, prompt: prompt, stream: false })
+    });
 
-  if (!response.ok) {
-    throw new Error(`Ollama error for ${model}: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Ollama error for ${model}: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.response;
+
+  }catch {
+    return FALLBACK_RESPONSE;
   }
-
-  const data = await response.json();
-  return data.response;
+  
 }
 
 async function callGPT(prompt) {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }]
-  });
+  if (!hasKey(process.env.OPENAI_API_KEY)) {
+    return FALLBACK_RESPONSE;
+  }
 
-  return response.choices[0].message.content;
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    return response.choices[0].message.content;
+  } catch (err) {
+    console.error("GPT error:", err.message);
+    return FALLBACK_RESPONSE;
+  }
 }
 
 async function callGemini(prompt) {
-  const response = await gemini.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt
-  });
+  if (!hasKey(process.env.GEMINI_API_KEY)) {
+    return FALLBACK_RESPONSE;
+  }
 
-  return response.text;
+  try {
+    const response = await gemini.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt
+    });
+
+    return response.text;
+  } catch (err) {
+    console.error("Gemini error:", err.message);
+    return FALLBACK_RESPONSE;
+  }
 }
 
 async function callClaude(prompt) {
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 500,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  if (!hasKey(process.env.ANTHROPIC_API_KEY)) {
+    return FALLBACK_RESPONSE;
+  }
 
-  return response.content[0].text;
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    return response.content[0].text;
+  } catch (err) {
+    console.error("Claude error:", err.message);
+    return FALLBACK_RESPONSE;
+  }
 }
 
 async function callSelectedModel(model, prompt) {
