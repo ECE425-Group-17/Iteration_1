@@ -12,7 +12,7 @@ const OLLAMA_URL = 'http://127.0.0.1:11434';
 
 async function determineLocationIntent(message) {
   const prompt = `Analyze the following message to determine if it is asking for travel recommendations, an itinerary, or information about a specific real-world location.
-Fictional locations (e.g., Hogwarts, Gotham, Tatooine) or general chat (e.g., "Hi", "Thanks", "How are you?") MUST return false for needsSearch.
+Fictional locations (e.g., Hogwarts, Gotham, Tatooine, Wakanda) or general chat (e.g., "Hi", "Thanks", "How are you?") MUST return false for needsSearch. 
 
 Respond ONLY with a valid JSON object in this exact format:
 {
@@ -23,15 +23,24 @@ Respond ONLY with a valid JSON object in this exact format:
 
 Message: "${message}"`;
 
-  try {
-    const responseText = await GoogleGenAI(prompt);
-    
-    const cleanText = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanText);
-  } catch (err) {
-    console.error("Intent parsing failed:", err);
-    return { needsSearch: false, searchQuery: null, isFictional: false };
-  }
+try {
+  const response = await gemini.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt
+  });
+
+  const responseText = response.text;
+
+  const cleanText = responseText
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  return JSON.parse(cleanText);
+} catch (err) {
+  console.error("Intent parsing failed:", err);
+  return { needsSearch: false, searchQuery: null, isFictional: false };
+}
 }
 
 async function searchGooglePlaces(userMessage) {
@@ -138,10 +147,18 @@ async function handleChat(userMessage, selectedModels = null) {
 
     let finalPrompt = "";
 
-    if (intent.isFictional) {
-      finalPrompt = `The user is asking about a fictional location: "${userMessage}". 
-      Playfully let them know that this place exists only in fiction, and offer to help them find a real-world destination with a similar vibe.`;
-      
+      if (intent.isFictional) {
+    finalPrompt = `
+    The user asked about the fictional location: "${userMessage}".
+
+    Respond with ONLY a short message explaining that the location is fictional and does not exist in the real world.
+
+    Do NOT recommend any real locations.
+    Do NOT suggest alternatives.
+    Do NOT provide travel advice.
+
+    Just clearly state that the place is fictional.
+    `;
     } else if (!intent.needsSearch) {
       finalPrompt = `You are a helpful travel assistant. The user said: "${userMessage}". 
       Respond to them naturally. If they are just saying hello or making small talk, greet them and ask how you can help them plan their next trip.`;
